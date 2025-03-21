@@ -8,7 +8,9 @@ from predicate_to_bst.parser import (
     Token,
     tokenize,
     parse_expression,
-    build_boolean_syntax_tree
+    build_boolean_syntax_tree,
+    to_polars_expr,
+    convert_to_polars
 )
 
 
@@ -151,3 +153,85 @@ def test_node_str_representation():
         Node(NodeType.CONDITION, '@.key2 == "value2"')
     ]
     assert str(and_node) == 'AND(Condition(@.key1 == "value1"), Condition(@.key2 == "value2"))'
+
+
+def test_to_polars_expr_equality_operations():
+    """Test converting equality operations to Polars expressions."""
+    # Test == operation
+    eq_node = Node(NodeType.CONDITION, '@.key == "value"')
+    assert to_polars_expr(eq_node) == 'pl.element().struct.field("key").eq("value")'
+    
+    # Test != operation
+    ne_node = Node(NodeType.CONDITION, '@.key != "value"')
+    assert to_polars_expr(ne_node) == 'pl.element().struct.field("key").ne("value")'
+
+
+def test_to_polars_expr_numeric_comparisons():
+    """Test converting numeric comparison operations to Polars expressions."""
+    # Test > operation
+    gt_node = Node(NodeType.CONDITION, '@.num > 10')
+    assert to_polars_expr(gt_node) == 'pl.element().struct.field("num").gt(10.0)'
+    
+    # Test < operation
+    lt_node = Node(NodeType.CONDITION, '@.num < 20')
+    assert to_polars_expr(lt_node) == 'pl.element().struct.field("num").lt(20.0)'
+    
+    # Test >= operation
+    ge_node = Node(NodeType.CONDITION, '@.num >= 30')
+    assert to_polars_expr(ge_node) == 'pl.element().struct.field("num").ge(30.0)'
+    
+    # Test <= operation
+    le_node = Node(NodeType.CONDITION, '@.num <= 40')
+    assert to_polars_expr(le_node) == 'pl.element().struct.field("num").le(40.0)'
+
+
+def test_to_polars_expr_logical_operations():
+    """Test converting logical operations to Polars expressions."""
+    # Test AND operation
+    and_node = Node(NodeType.AND)
+    and_node.children = [
+        Node(NodeType.CONDITION, '@.key1 == "value1"'),
+        Node(NodeType.CONDITION, '@.key2 != "value2"')
+    ]
+    expected_and = '(pl.element().struct.field("key1").eq("value1")).and_(pl.element().struct.field("key2").ne("value2"))'
+    assert to_polars_expr(and_node) == expected_and
+    
+    # Test OR operation
+    or_node = Node(NodeType.OR)
+    or_node.children = [
+        Node(NodeType.CONDITION, '@.key1 == "value1"'),
+        Node(NodeType.CONDITION, '@.key2 != "value2"')
+    ]
+    expected_or = '(pl.element().struct.field("key1").eq("value1")).or_(pl.element().struct.field("key2").ne("value2"))'
+    assert to_polars_expr(or_node) == expected_or
+
+
+def test_to_polars_expr_complex_tree():
+    """Test converting a complex tree to a Polars expression."""
+    # Create a complex tree: (@.a == "x" || @.b == "y") && @.c > 10
+    complex_node = Node(NodeType.AND)
+    
+    or_node = Node(NodeType.OR)
+    or_node.children = [
+        Node(NodeType.CONDITION, '@.a == "x"'),
+        Node(NodeType.CONDITION, '@.b == "y"')
+    ]
+    
+    gt_node = Node(NodeType.CONDITION, '@.c > 10')
+    
+    complex_node.children = [or_node, gt_node]
+    
+    expected = '((pl.element().struct.field("a").eq("x")).or_(pl.element().struct.field("b").eq("y"))).and_(pl.element().struct.field("c").gt(10.0))'
+    assert to_polars_expr(complex_node) == expected
+
+
+def test_convert_to_polars():
+    """Test the convenience function to convert expressions directly to Polars."""
+    # Test simple expression
+    simple_expr = '@.key == "value"'
+    assert convert_to_polars(simple_expr) == 'pl.element().struct.field("key").eq("value")'
+    
+    # Test complex expression
+    complex_expr = '@.key1 == "value1" && (@.key2 != "value2" || @.num > 10)'
+    expected = '(pl.element().struct.field("key1").eq("value1")).and_((pl.element().struct.field("key2").ne("value2")).or_(pl.element().struct.field("num").gt(10.0)))'
+    assert convert_to_polars(complex_expr) == expected

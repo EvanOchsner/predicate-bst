@@ -6,7 +6,8 @@ parentheses, and conditions into a tree structure.
 """
 
 from enum import Enum
-from typing import List, Dict, Any, Optional, Tuple
+import re
+from typing import List, Dict, Any, Optional, Tuple, Union
 
 
 class NodeType(Enum):
@@ -45,6 +46,32 @@ class Node:
             result["children"] = [child.to_dict() for child in self.children]
         
         return result
+    
+    def to_ascii(self) -> str:
+        """Generate an ASCII representation of the tree with this node as root."""
+        lines = []
+        self._to_ascii_rec(lines, "", "", "")
+        return "\n".join(lines)
+    
+    def _to_ascii_rec(self, lines: List[str], prefix: str, child_prefix: str, label_prefix: str) -> None:
+        """Recursively build ASCII representation of the tree."""
+        label = str(self.type.value)
+        if self.type == NodeType.CONDITION:
+            label += f": {self.value}"
+        
+        lines.append(f"{prefix}{label_prefix}{label}")
+        
+        for i, child in enumerate(self.children):
+            is_last_child = i == len(self.children) - 1
+            
+            if is_last_child:
+                new_prefix = child_prefix + "    "
+                new_label_prefix = "└── "
+            else:
+                new_prefix = child_prefix + "│   "
+                new_label_prefix = "├── "
+            
+            child._to_ascii_rec(lines, child_prefix, new_prefix, new_label_prefix)
 
 
 class TokenType(Enum):
@@ -265,3 +292,131 @@ def build_boolean_syntax_tree(expression: str) -> Node:
     """
     tokens = tokenize(expression)
     return parse_expression(tokens)
+
+
+def to_polars_expr(tree: Node) -> str:
+    """
+    Convert a Boolean syntax tree to a Polars expression string.
+    
+    This function translates BST nodes into polars expression code that can be executed
+    using the polars query engine. It handles field references, comparison operations,
+    and logical operations.
+    
+    Args:
+        tree: The root node of the Boolean syntax tree
+        
+    Returns:
+        A Python code string representing a Polars expression
+        
+    Raises:
+        ValueError: If a condition has an unsupported format or operation
+    """
+    if tree.type == NodeType.CONDITION:
+        # Parse condition: expected format is "@.field op value"
+        condition = tree.value.strip()
+        
+        # Match field pattern (@.field)
+        field_match = re.search(r'(@\.\w+)', condition)
+        if not field_match:
+            raise ValueError(f"Invalid field reference in condition: {condition}")
+        
+        field_ref = field_match.group(1)
+        field_name = field_ref.replace('@.', '')
+        
+        # Replace @.field with pl.element().struct.field("field")
+        pl_field = f'pl.element().struct.field("{field_name}")'
+        
+        # Match comparison operator
+        if '==' in condition:
+            op_parts = condition.split('==', 1)
+            op_method = '.eq'
+        elif '!=' in condition:
+            op_parts = condition.split('!=', 1)
+            op_method = '.ne'
+        elif '>=' in condition:
+            op_parts = condition.split('>=', 1)
+            op_method = '.ge'
+        elif '<=' in condition:
+            op_parts = condition.split('<=', 1)
+            op_method = '.le'
+        elif '>' in condition:
+            op_parts = condition.split('>', 1)
+            op_method = '.gt'
+        elif '<' in condition:
+            op_parts = condition.split('<', 1)
+            op_method = '.lt'
+        else:
+            raise ValueError(f"Unsupported comparison operator in condition: {condition}")
+        
+        # Extract and format value
+        value = op_parts[1].strip()
+        
+        # For numeric comparisons, convert to float
+        if op_method in ['.gt', '.lt', '.ge', '.le']:
+            # Strip quotes if present
+            if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
+                value = value[1:-1]
+            
+            # Try to convert to float
+            try:
+                float_value = float(value)
+                value = str(float_value)  # Ensure proper format
+            except ValueError:
+                # If it's not convertible to float, use it as is
+                pass
+        
+        # Format and return polars expression for this condition
+        return f"{pl_field}{op_method}({value})"
+        
+    elif tree.type == NodeType.AND:
+        # Convert AND node to .and_() method chain
+        if not tree.children:
+            raise ValueError("AND node has no children")
+        
+        children_exprs = [to_polars_expr(child) for child in tree.children]
+        if len(children_exprs) == 1:
+            return children_exprs[0]
+        
+        # Chain all children with .and_()
+        result = children_exprs[0]
+        for expr in children_exprs[1:]:
+            result = f"({result}).and_({expr})"
+        
+        return result
+        
+    elif tree.type == NodeType.OR:
+        # Convert OR node to .or_() method chain
+        if not tree.children:
+            raise ValueError("OR node has no children")
+        
+        children_exprs = [to_polars_expr(child) for child in tree.children]
+        if len(children_exprs) == 1:
+            return children_exprs[0]
+        
+        # Chain all children with .or_()
+        result = children_exprs[0]
+        for expr in children_exprs[1:]:
+            result = f"({result}).or_({expr})"
+        
+        return result
+    
+    raise ValueError(f"Unsupported node type: {tree.type}")
+
+
+def convert_to_polars(expression: str) -> str:
+    """
+    Convert a logical predicate string directly to a Polars expression string.
+    
+    This is a convenience function that combines parsing and conversion to Polars.
+    
+    Args:
+        expression: The logical predicate in string form
+        
+    Returns:
+        A Python code string representing a Polars expression
+        
+    Raises:
+        ValueError: If the expression is invalid or contains unsupported operations
+    """
+    tree = build_boolean_syntax_tree(expression)
+    return to_polars_expr(tree)
