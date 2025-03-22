@@ -1,10 +1,11 @@
-"""Example usage of the predicate_to_bst package."""
+"""Example usage of the predicate_bst package."""
 
 import json
-from predicate_to_bst import build_boolean_syntax_tree, convert_to_polars
+import polars as pl
+from predicate_bst import build_boolean_syntax_tree, convert_to_polars
 
-def main():
-    """Run examples of building Boolean syntax trees from expressions."""
+def basic_usage():
+    """Demonstrate basic usage of building Boolean syntax trees from expressions."""
     examples = [
         '@.key1 == "value1" && @.key2 != "value2"',
         '@.k1 == "v1" || (@.k2 == "v2" && (@.k3 >= 1.1 || @.k4 < 0))',
@@ -21,8 +22,11 @@ def main():
         
         print("\nPolars Expression:")
         polars_expr = convert_to_polars(expr)
-        print(polars_expr)
+        print(f"  {polars_expr}")
         print("\n" + "="*50 + "\n")
 
+
 if __name__ == "__main__":
-    main()
+    print("BASIC SYNTAX TREE EXAMPLES")
+    print("=" * 50)
+    basic_usage()

@@ -1,7 +1,7 @@
-"""Tests for the predicate_to_bst package."""
+"""Tests for the predicate_bst package."""
 
 import pytest
-from predicate_to_bst.parser import (
+from predicate_bst import (
     NodeType,
     Node,
     TokenType,

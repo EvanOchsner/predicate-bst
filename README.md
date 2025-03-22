@@ -15,11 +15,11 @@ A Python library for converting logical expressions into Boolean syntax trees an
 
 ```bash
 # Install from PyPI (when published)
-pip install predicate-to-bst
+pip install predicate-bst
 
 # Install from source
-git clone https://github.com/yourusername/predicate_to_bst.git
-cd predicate_to_bst
+git clone https://github.com/EvanOchsner/predicate-bst.git
+cd predicate-bst
 pip install -e .
 
 # Install with development dependencies
@@ -31,7 +31,7 @@ pip install -e ".[dev]"
 ### Basic Parsing and Visualization
 
 ```python
-from predicate_to_bst import build_boolean_syntax_tree
+from predicate_bst import build_boolean_syntax_tree
 
 # Simple expression
 expression1 = '@.key1 == "value1" && @.key2 != "value2"'
@@ -58,7 +58,7 @@ print(tree_dict)
 ### Converting to Polars Expressions
 
 ```python
-from predicate_to_bst import convert_to_polars
+from predicate_bst import convert_to_polars
 
 # Convert a predicate directly to a Polars expression string
 expression = '@.price > 100 && @.category == "electronics"'
@@ -68,9 +68,14 @@ print(polars_expr)
 
 # Use with a Polars DataFrame
 import polars as pl
-from predicate_to_bst import convert_to_polars
+from predicate_bst import convert_to_polars
 
-df = pl.DataFrame(...)  # Your data
+df = pl.DataFrame({
+    "id": [1, 2, 3, 4, 5],
+    "category": ["electronics", "books", "electronics", "clothing", "books"],
+    "price": [120.50, 15.99, 89.99, 45.00, 9.99],
+    "in_stock": [True, True, False, True, True]
+})
 predicate = '@.price > 100 && @.category == "electronics"'
 polars_expr = convert_to_polars(predicate)
 
@@ -101,8 +106,8 @@ Examples of valid expressions:
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/predicate_to_bst.git
-cd predicate_to_bst
+git clone https://github.com/EvanOchsner/predicate-bst.git
+cd predicate-bst
 
 # Install development dependencies
 pip install -e ".[dev]"
@@ -115,7 +120,10 @@ pip install -e ".[dev]"
 pytest
 
 # Run with coverage
-pytest --cov=predicate_to_bst
+pytest --cov=predicate_bst
+
+# Or use the provided test script
+./run_tests.sh
 ```
 
 ## License
